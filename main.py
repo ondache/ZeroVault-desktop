@@ -3,7 +3,7 @@ import os
 import time
 from getpass import getpass
 
-from crypto import is_seed_valid, get_hash
+from crypto import is_seed_valid, derive_key
 from wordlist import word_to_index, is_seed_phrase_valid
 
 
@@ -11,15 +11,15 @@ from wordlist import word_to_index, is_seed_phrase_valid
 MODES = [
     {
         'name': 'STRONG',
-        'hash-key-size': 21,
-        'password-length': 28,
-        'iterations': 10_000_000
+        'hash-key-size': 16,
+        'password-length': 24,
+        'iterations': 1_000_000
     },
     {
         'name': 'ULTRA',
-        'hash-key-size': 90,
+        'hash-key-size': 88,
         'password-length': 120,
-        'iterations': 100_000_000
+        'iterations': 5_000_000
     }
 ]
 
@@ -57,33 +57,33 @@ def enter_seed_phrase() -> bytes:
     return seed
 
 
-def enter_passphrase() -> bytes:
-    passphrase = getpass("Enter pass-phrase (leave empty for none): ")
+def enter_passphrase() -> str:
+    passphrase = getpass("Enter pass-phrase (leave empty for none): ").strip()
     if len(passphrase) != 0 and len(passphrase.strip()) == 0:
         print("Invalid passphrase!")
         return enter_passphrase()
-    if len(passphrase) != 0 and getpass("Confirm pass-phrase: ") != passphrase:
+    if len(passphrase) != 0 and getpass("Confirm pass-phrase: ").strip() != passphrase:
         print("Passphrases don't match!")
         return enter_passphrase()
-    return passphrase.encode('utf-8')
+    return passphrase
 
 
-def enter_meta() -> bytes:
+def enter_meta() -> str:
     meta = input('Enter service, year and quarter (like "yahoomail 2025 2"): ')
-    if meta.count(" ") != 2:
-        print("Incorrect format!")
+    metas = iter(meta.strip().split())
+    service, year, quarter = next(metas, ''), next(metas, ''), next(metas, '')
+    if next(metas, None) is not None:
+        print('Too many arguments!')
         return enter_meta()
-    service, year, quarter = meta.split()
-    if not quarter in {'1', '2', '3', '4'}:
+    if not quarter in {'1', '2', '3', '4', ''}:
         print("Incorrect quarter!")
         return enter_meta()
-    if not year.isdigit() and len(year) != 4:
+    if quarter != '':
+        quarter = f'q{quarter}'
+    if year != '' and (not year.isdigit() or len(year) != 4):
         print("Incorrect year!")
         return enter_meta()
-    if len(service) == 0:
-        print("Incorrect service!")
-        return enter_meta()
-    return f'{service}{year}q{quarter}'.encode('utf-8')
+    return f'{service}{year}{quarter}'
 
 
 def enter_mode() -> dict:
@@ -95,9 +95,9 @@ def enter_mode() -> dict:
     return MODES[int(mode) - 1]
 
 
-def humanize_hash(hashed: bytes) -> str:
+def humanize(buffer: bytes) -> str:
     # Using url safe *_ chars instead of base64's +/ chars
-    return base64.b64encode(hashed, altchars=b'*_').decode('utf-8')
+    return base64.b64encode(buffer, altchars=b'*_').decode('utf-8').replace('=', '-')
 
 
 def print_password(password: str) -> None:
@@ -105,16 +105,22 @@ def print_password(password: str) -> None:
     input("Press enter to exit...")
 
 
+def greet() -> None:
+    print("Password Generator v2")
+
+
 def main() -> None:
+    greet()
     seed = enter_seed_phrase()
     passphrase = enter_passphrase()
     meta = enter_meta()
     mode = enter_mode()
     print('Generating password...')
     start = time.perf_counter()
-    hashed = get_hash(seed, passphrase + meta, mode['hash-key-size'], mode['iterations'])
-    print(f'Generation took {time.perf_counter() - start} seconds')
-    password = humanize_hash(hashed)
+    salt = (passphrase + meta).ljust(16, '*').encode('utf-8')
+    derived = derive_key(seed, salt, mode['hash-key-size'], mode['iterations'])
+    print(f'Generation took {time.perf_counter() - start:.2f} seconds')
+    password = humanize(derived)
     print_password(password)
     os.system('cls' if os.name == 'nt' else 'clear')
 
