@@ -1,30 +1,12 @@
-import base64
 import os
 import time
 from getpass import getpass
 
-from crypto import is_seed_valid, derive_key
+from crypto import is_seed_valid, generate_password, MODES
 from wordlist import word_to_index, is_seed_phrase_valid
 
 
-# https://www.hivesystems.com/blog/are-your-passwords-in-the-green-2023
-MODES = [
-    {
-        'name': 'STRONG',
-        'hash-key-size': 16,
-        'password-length': 24,
-        'iterations': 1_000_000
-    },
-    {
-        'name': 'ULTRA',
-        'hash-key-size': 88,
-        'password-length': 120,
-        'iterations': 5_000_000
-    }
-]
-
-
-def mnemonic_to_seed(seed_phrase: str) -> bytes:
+def mnemonic_to_seed(seed_phrase: str) -> int:
     """
     Convert a 12-word BIP-39 seed phrase to its 16-byte entropy +
     1-byte checksum = 17-byte vector.
@@ -39,10 +21,10 @@ def mnemonic_to_seed(seed_phrase: str) -> bytes:
     # 132-bit concatenation
     bit_str = ''.join(f"{i:011b}" for i in indices)  # 132 bits
     entropy_int = int(bit_str, 2)
-    return entropy_int.to_bytes(17, byteorder="big")
+    return entropy_int
 
 
-def enter_seed_phrase() -> bytes:
+def enter_seed_phrase() -> int:
     seed_phrase = getpass("Enter seed-phrase: ").lower()
     if seed_phrase.count(" ") != 11:
         print("Incorrect format! 12 words are required!")
@@ -68,7 +50,7 @@ def enter_passphrase() -> str:
     return passphrase
 
 
-def enter_meta() -> str:
+def enter_meta() -> tuple[str, str, str]:
     meta = input('Enter service, year and quarter (like "yahoomail 2025 2"): ')
     metas = iter(meta.strip().split())
     service, year, quarter = next(metas, ''), next(metas, ''), next(metas, '')
@@ -78,26 +60,19 @@ def enter_meta() -> str:
     if not quarter in {'1', '2', '3', '4', ''}:
         print("Incorrect quarter!")
         return enter_meta()
-    if quarter != '':
-        quarter = f'q{quarter}'
     if year != '' and (not year.isdigit() or len(year) != 4):
         print("Incorrect year!")
         return enter_meta()
-    return f'{service}{year}{quarter}'
+    return service, year, quarter
 
 
-def enter_mode() -> dict:
-    message = 'Enter mode (digit):\n' + ''.join((f'{i+1}. {mode['name']} (len {mode['password-length']})\n' for i, mode in enumerate(MODES)))
+def enter_mode() -> str:
+    message = 'Enter mode (digit):\n' + ''.join((f'{i+1}. {mode_name} (len {MODES[mode_name]['password-length']})\n' for i, mode_name in enumerate(MODES)))
     mode = input(message)
     if not mode.isdigit() or not 1 <= int(mode) <= len(MODES):
         print("Incorrect mode! Enter just digit!")
         return enter_mode()
-    return MODES[int(mode) - 1]
-
-
-def humanize(buffer: bytes) -> str:
-    # Using url safe *_ chars instead of base64's +/ chars
-    return base64.b64encode(buffer, altchars=b'*_').decode('utf-8').replace('=', '-')
+    return list(MODES.keys())[int(mode) - 1]
 
 
 def print_password(password: str) -> None:
@@ -113,14 +88,19 @@ def main() -> None:
     greet()
     seed = enter_seed_phrase()
     passphrase = enter_passphrase()
-    meta = enter_meta()
+    service, year, quarter = enter_meta()
     mode = enter_mode()
     print('Generating password...')
     start = time.perf_counter()
-    salt = (passphrase + meta).ljust(16, '*').encode('utf-8')
-    derived = derive_key(seed, salt, mode['hash-key-size'], mode['iterations'])
+    password = generate_password(
+        seed=seed,
+        passphrase=passphrase,
+        service=service,
+        year=year,
+        quarter=quarter,
+        mode=mode
+    )
     print(f'Generation took {time.perf_counter() - start:.2f} seconds')
-    password = humanize(derived)
     print_password(password)
     os.system('cls' if os.name == 'nt' else 'clear')
 
