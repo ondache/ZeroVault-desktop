@@ -4,14 +4,9 @@ import csv
 import crypto
 
 
-def seed_to_bytes(seed: int):
-    return seed.to_bytes(17, byteorder="big")
-
-
 # seed mnemonic:
 # spice rapid hub ten face funny boil hope future rhythm scheme movie
-SEED_INT = 4457419962331937427314377610565619035271
-SEED = seed_to_bytes(SEED_INT)
+SEED = 4457419962331937427314377610565619035271
 
 
 def load_test_data():
@@ -24,7 +19,7 @@ def load_test_data():
 
 
 def test_simple():
-    seed = SEED_INT
+    seed = SEED
     passphrase = 'qwerty'
     service = 'yahoomail'
     year = '2026'
@@ -46,7 +41,7 @@ def test_simple():
 
 
 def test_empty():
-    seed = SEED_INT
+    seed = SEED
     passphrase = ''
     service = ''
     year = ''
@@ -68,7 +63,7 @@ def test_empty():
 
 
 def test_ultra():
-    seed = SEED_INT
+    seed = SEED
     passphrase = 'qwerty'
     service = 'yahoomail'
     year = '2026'
@@ -112,7 +107,7 @@ def test_zero_seed():
 
 
 def test_unicode():
-    seed = SEED_INT
+    seed = SEED
     passphrase = '🍎ΝЯ个ÓÿК🍕Δыq😎ل'
     service = 'yahoomail'
     year = '2026'
